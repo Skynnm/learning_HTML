@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>城池经营 · 单机游戏 Demo</title>
+<style>
+  :root {
+    --bg: #141821;
+    --panel: #1e2532;
+    --panel2: #262f3f;
+    --border: #39445a;
+    --text: #e8edf5;
+    --muted: #9aa7bd;
+    --gold: #f5c542;
+    --green: #6cc26c;
+    --red: #e06c6c;
+    --blue: #5aa7e0;
+    --accent: #ffd166;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    background: radial-gradient(circle at 50% 0%, #1d2740 0%, var(--bg) 60%);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 18px;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 14px;
+  }
+  header h1 { font-size: 24px; letter-spacing: 1px; }
+  header .goal {
+    font-size: 13px; color: var(--muted);
+    background: var(--panel); border: 1px solid var(--border);
+    padding: 6px 12px; border-radius: 999px;
+  }
+  #stats {
+    display: flex; flex-wrap: wrap; gap: 10px;
+    margin-left: auto;
+  }
+  .stat {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 8px 14px; min-width: 96px;
+    text-align: center;
+  }
+  .stat .v { font-size: 20px; font-weight: 700; }
+  .stat .k { font-size: 12px; color: var(--muted); }
+  .stat.gold .v { color: var(--gold); }
+  .stat.food .v { color: var(--green); }
+  .stat.wood .v { color: #c9a06a; }
+  .stat.stone .v { color: #b7b7c9; }
+  .stat.pop .v { color: var(--blue); }
+  .stat.happy .v { color: #e88bc0; }
+  .stat.turn .v { color: var(--accent); }
+
+  #main { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
+  #left { flex: 1 1 560px; min-width: 320px; }
+  #right { flex: 0 0 340px; display: flex; flex-direction: column; gap: 12px; }
+
+  .panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; padding: 12px;
+  }
+  #grid {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 6px;
+    max-width: 560px;
+  }
+  .cell {
+    aspect-ratio: 1;
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px; cursor: pointer;
+    transition: transform .08s ease, box-shadow .08s ease, background .15s;
+    user-select: none;
+  }
+  .cell:hover { transform: translateY(-2px); box-shadow: 0 3px 0 rgba(0,0,0,.3); }
+  .cell.built { background: #2b3a34; border-color: #4a6b5a; }
+  .cell.empty-selected:hover { background: #31405a; border-color: var(--blue); }
+
+  #build-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .build-btn {
+    background: var(--panel2); border: 1px solid var(--border);
+    border-radius: 9px; padding: 8px 10px; cursor: pointer; color: var(--text);
+    text-align: left; transition: .12s;
+  }
+  .build-btn:hover:not(:disabled) { border-color: var(--blue); transform: translateY(-1px); }
+  .build-btn:disabled { opacity: .4; cursor: not-allowed; }
+  .build-btn.selected { border-color: var(--accent); background: #3a3523; }
+  .build-btn .icon { font-size: 20px; margin-right: 4px; }
+  .build-btn .nm { font-weight: 700; font-size: 14px; }
+  .build-btn .cost { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .build-btn .desc { font-size: 11px; color: #b8c4d8; margin-top: 2px; }
+
+  #controls { display: flex; gap: 8px; }
+  #controls button {
+    flex: 1; padding: 12px; font-size: 15px; font-weight: 700;
+    border: none; border-radius: 10px; cursor: pointer; transition: .12s;
+  }
+  #next-turn { background: var(--green); color: #10210f; }
+  #next-turn:hover { filter: brightness(1.08); }
+  #demolish { background: var(--panel2); color: var(--text); border: 1px solid var(--border) !important; }
+  #demolish.on { background: var(--red); color: #fff; border-color: var(--red) !important; }
+
+  #log { max-height: 220px; overflow-y: auto; font-size: 13px; line-height: 1.5; }
+  #log .entry { padding: 3px 2px; border-bottom: 1px dashed var(--border); color: #c7d2e2; }
+  #log .entry.turn { color: var(--accent); font-weight: 700; }
+
+  #overlay {
+    position: fixed; inset: 0; background: rgba(8,11,18,.82);
+    display: flex; align-items: center; justify-content: center; z-index: 50;
+  }
+  #overlay.hidden { display: none; }
+  .dialog {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
+    max-width: 560px; padding: 28px; box-shadow: 0 20px 60px rgba(0,0,0,.5);
+  }
+  .dialog h2 { margin-bottom: 12px; font-size: 22px; }
+  .dialog p, .dialog li { color: #c7d2e2; font-size: 14px; line-height: 1.7; }
+  .dialog ul { padding-left: 20px; margin: 8px 0 16px; }
+  .dialog button {
+    width: 100%; padding: 14px; font-size: 16px; font-weight: 700;
+    background: var(--green); color: #10210f; border: none; border-radius: 10px; cursor: pointer;
+  }
+  .dialog button:hover { filter: brightness(1.08); }
+  .badge { display:inline-block; background: var(--panel2); border:1px solid var(--border); border-radius:6px; padding:1px 6px; font-size:12px; color:var(--muted); }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>🏰 城池经营</h1>
+    <div class="goal">目标：人口 ≥ 50 后建造 <b>宫殿</b> 即可获胜</div>
+    <div id="stats">
+      <div class="stat gold"><div class="v" id="s-gold">0</div><div class="k">金币</div></div>
+      <div class="stat food"><div class="v" id="s-food">0</div><div class="k">粮食</div></div>
+      <div class="stat wood"><div class="v" id="s-wood">0</div><div class="k">木材</div></div>
+      <div class="stat stone"><div class="v" id="s-stone">0</div><div class="k">石料</div></div>
+      <div class="stat pop"><div class="v" id="s-pop">0</div><div class="k">人口</div></div>
+      <div class="stat happy"><div class="v" id="s-happy">0</div><div class="k">民心</div></div>
+      <div class="stat turn"><div class="v" id="s-turn">0</div><div class="k">回合</div></div>
+    </div>
+  </header>
+
+  <div id="main">
+    <div id="left" class="panel">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <span style="font-size:14px; font-weight:700;">城池地图</span>
+        <span id="mode-hint" style="font-size:12px; color:var(--muted);">点击下方建筑，再点地图格子建造</span>
+      </div>
+      <div id="grid"></div>
+    </div>
+
+    <div id="right">
+      <div class="panel">
+        <div style="font-size:14px; font-weight:700; margin-bottom:8px;">建造</div>
+        <div id="build-panel"></div>
+      </div>
+      <div id="controls">
+        <button id="next-turn">下一回合 ▶</button>
+        <button id="demolish">🧹 拆除</button>
+      </div>
+      <div class="panel">
+        <div style="font-size:14px; font-weight:700; margin-bottom:6px;">记事</div>
+        <div id="log"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="overlay">
+    <div class="dialog" id="start-dialog">
+      <h2>🏰 欢迎来到你的城池</h2>
+      <p>你是这座小城的主人。合理分配资源、发展人口、抵御匪患，最终建成宏伟的<strong>宫殿</strong>。</p>
+      <ul>
+        <li><span class="badge">💰</span> 金币 —— 建造与军费，主要靠<strong>集市</strong>和<strong>税收</strong>获得</li>
+        <li><span class="badge">🌾</span> 粮食 —— 养活人口，靠<strong>农田</strong>产出；粮食不足会闹饥荒</li>
+        <li><span class="badge">🪵</span> 木材 / <span class="badge">⛏️</span> 石料 —— 靠<strong>伐木场</strong>和<strong>采石场</strong>产出</li>
+        <li><span class="badge">👥</span> 人口 —— 需要<strong>民居</strong>提供住房，民心高且粮食充足时增长</li>
+        <li><span class="badge">⚔️</span> 兵营 / <span class="badge">🧱</span> 城墙 —— 抵御<strong>匪患</strong>，守住财富与民心</li>
+      </ul>
+      <p><strong>胜利条件：</strong>人口 ≥ 50 后建造宫殿（200 石料 + 500 金币）。<br>
+      <strong>失败条件：</strong>人口归零，或民心连续过低引发暴动。</p>
+      <button id="start-btn">开始游戏</button>
+    </div>
+  </div>
+
+  <div id="overlay-end" class="hidden" style="position:fixed; inset:0; background:rgba(8,11,18,.82); display:flex; align-items:center; justify-content:center; z-index:60;">
+    <div class="dialog" style="text-align:center;">
+      <h2 id="end-title"></h2>
+      <p id="end-msg"></p>
+      <p style="margin-top:10px; color:var(--muted);">共经营了 <span id="end-turns"></span> 回合</p>
+      <button id="restart-btn" style="margin-top:16px;">重新开始</button>
+    </div>
+  </div>
+
+<script>
+(function () {
+  "use strict";
+
+  var COLS = 8, ROWS = 8;
+
+  var BUILDINGS = {
+    house:    { name:"民居",   icon:"🏠", desc:"+10 人口上限",           cost:{wood:40, gold:10}, popCap:10, happiness:2 },
+    farm:     { name:"农田",   icon:"🌾", desc:"每回合 +15 粮食",        cost:{wood:20, gold:10}, food:15 },
+    lumber:   { name:"伐木场", icon:"🪵", desc:"每回合 +10 木材",        cost:{gold:30}, wood:10 },
+    quarry:   { name:"采石场", icon:"⛏️", desc:"每回合 +8 石料",         cost:{gold:40}, stone:8 },
+    market:   { name:"集市",   icon:"🏪", desc:"每回合 +25 金币",        cost:{wood:50, gold:40}, gold:25 },
+    barracks: { name:"兵营",   icon:"⚔️", desc:"+5 士兵（维护 2金币/1粮）", cost:{wood:40, gold:20}, soldiers:5, upkeep:{gold:2, food:1} },
+    wall:     { name:"城墙",   icon:"🧱", desc:"+5 防御，+3 民心",       cost:{stone:50}, defense:5, happiness:3 },
+    palace:   { name:"宫殿",   icon:"🏰", desc:"建成即获胜（人口≥50）",   cost:{stone:200, gold:500}, win:true, popReq:50 }
+  };
+
+  var state;
+
+  function freshState() {
+    return {
+      gold: 500, food: 300, wood: 150, stone: 60,
+      population: 20, happiness: 60,
+      turn: 1, revolt: 0,
+      grid: new Array(COLS * ROWS).fill(null),
+      selected: null, demolish: false,
+      gameOver: false, log: []
+    };
+  }
+
+  function setup() {
+    state = freshState();
+    [0, 1, 2].forEach(function (i) { state.grid[i] = "house"; });
+    [8, 9].forEach(function (i) { state.grid[i] = "farm"; });
+    buildPanel();
+    bind();
+    render();
+  }
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  function computeStats() {
+    var s = { food:0, wood:0, stone:0, goldIncome:0, popCap:0, soldiers:0, defense:0, upkeepGold:0, upkeepFood:0 };
+    for (var i = 0; i < state.grid.length; i++) {
+      var b = state.grid[i];
+      if (!b) continue;
+      var c = BUILDINGS[b];
+      s.food += c.food || 0;
+      s.wood += c.wood || 0;
+      s.stone += c.stone || 0;
+      s.goldIncome += c.gold || 0;
+      s.popCap += c.popCap || 0;
+      s.soldiers += c.soldiers || 0;
+      s.defense += c.defense || 0;
+      if (c.upkeep) { s.upkeepGold += c.upkeep.gold || 0; s.upkeepFood += c.upkeep.food || 0; }
+    }
+    s.goldIncome += state.population; // 税收
+    return s;
+  }
+
+  function canAfford(b) {
+    var c = BUILDINGS[b].cost;
+    return (c.wood || 0) <= state.wood && (c.stone || 0) <= state.stone && (c.gold || 0) <= state.gold;
+  }
+
+  function pay(b) {
+    var c = BUILDINGS[b].cost;
+    state.wood -= c.wood || 0;
+    state.stone -= c.stone || 0;
+    state.gold -= c.gold || 0;
+  }
+
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+  function logMsg(msg, isTurn) {
+    state.log.unshift({ msg: msg, turn: isTurn });
+    if (state.log.length > 60) state.log.length = 60;
+  }
+
+  function onCell(i) {
+    if (state.gameOver) return;
+    if (state.demolish) {
+      if (!state.grid[i]) { logMsg("这里没有建筑可拆。"); return; }
+      var cfg = BUILDINGS[state.grid[i]];
+      state.grid[i] = null;
+      state.happiness = clamp(state.happiness - (cfg.happiness || 0), 0, 100);
+      logMsg("拆除了 " + cfg.icon + cfg.name + "。");
+      render();
+      return;
+    }
+    if (state.selected) {
+      if (state.grid[i]) { logMsg("这里已有建筑，请选择空地。"); return; }
+      var b = state.selected, cfg = BUILDINGS[b];
+      if (cfg.popReq && state.population < cfg.popReq) { logMsg("人口不足 " + cfg.popReq + "，无法建造" + cfg.name + "。"); return; }
+      if (!canAfford(b)) { logMsg("资源不足，无法建造" + cfg.name + "。"); return; }
+      pay(b);
+      state.grid[i] = b;
+      state.happiness = clamp(state.happiness + (cfg.happiness || 0), 0, 100);
+      if (cfg.win) { logMsg("建造了 " + cfg.icon + cfg.name + "！"); render(); winGame(); return; }
+      logMsg("建造了 " + cfg.icon + cfg.name + "。");
+      state.selected = null;
+      render();
+      return;
+    }
+    if (state.grid[i]) {
+      var b2 = BUILDINGS[state.grid[i]];
+      logMsg("此处是 " + b2.icon + b2.name + "（" + b2.desc + "）。");
+    }
+  }
+
+  function nextTurn() {
+    if (state.gameOver) return;
+    var s = computeStats();
+
+    // 生产与收入
+    state.wood += s.wood;
+    state.stone += s.stone;
+    state.gold += s.goldIncome - s.upkeepGold;
+    state.food += s.food - (state.population + s.upkeepFood);
+
+    // 随机事件
+    rollEvent(s);
+
+    // 饥荒
+    if (state.food < 0) {
+      var dead = Math.min(state.population, Math.ceil(-state.food));
+      state.population -= dead;
+      state.food = 0;
+      state.happiness = clamp(state.happiness - 15, 0, 100);
+      logMsg("💀 饥荒！粮食不足，饿死了 " + dead + " 人。");
+    }
+
+    // 人口增长 / 流失
+    if (state.food > 0 && state.happiness >= 50 && state.population < s.popCap) {
+      var grow = Math.min(3, s.popCap - state.population);
+      state.population += grow;
+      if (grow > 0) logMsg("👨‍👩‍👧‍👦 人口增长 +" + grow + "。");
+    } else if (state.happiness < 30 && state.population > 1) {
+      state.population -= 2;
+      logMsg("😞 民不聊生，人口流失 -2。");
+    }
+
+    // 民心微调
+    if (state.food >= state.population && state.food > 0) state.happiness = clamp(state.happiness + 2, 0, 100);
+    if (state.population >= s.popCap && s.popCap > 0) state.happiness = clamp(state.happiness - 4, 0, 100);
+
+    // 暴动
+    if (state.happiness <= 5) state.revolt++; else state.revolt = 0;
+    if (state.revolt >= 3) { render(); return loseGame("民心尽失，民众发动起义，城池陷落！"); }
+
+    // 失败：人口归零
+    if (state.population <= 0) { render(); return loseGame("人口凋零，城池沦为废墟。"); }
+
+    state.turn++;
+    logMsg("—— 第 " + state.turn + " 回合 ——", true);
+    render();
+  }
+
+  function rollEvent(s) {
+    if (Math.random() > 0.35) return;
+    var list = ["harvest", "drought", "bandit", "caravan", "plague", "festival"];
+    var e = list[Math.floor(Math.random() * list.length)];
+    var msg;
+    switch (e) {
+      case "harvest":
+        state.food += 50; msg = "🌾 风调雨顺，粮食大丰收！(+50 粮食)"; break;
+      case "drought":
+        state.food -= 40; msg = "☀️ 天降旱灾，粮食减产！(-40 粮食)"; break;
+      case "caravan":
+        state.gold += 100; msg = "🐫 商队路过，带来财富！(+100 金币)"; break;
+      case "plague":
+        var d = Math.min(state.population, 3);
+        state.population -= d;
+        state.happiness = clamp(state.happiness - 10, 0, 100);
+        msg = "🦠 瘟疫蔓延，" + d + " 人病亡，民心 -10。"; break;
+      case "festival":
+        state.happiness = clamp(state.happiness + 8, 0, 100);
+        msg = "🎉 百姓自发庆祝，民心大振！(+8 民心)"; break;
+      case "bandit":
+        var strength = 5 + Math.floor(state.turn / 5) * 3 + Math.floor(Math.random() * 6);
+        var defense = s.soldiers * 2 + s.defense;
+        if (defense >= strength) {
+          state.happiness = clamp(state.happiness + 5, 0, 100);
+          msg = "⚔️ 匪患来袭（强度 " + strength + "），被守军击退！民心 +5。";
+        } else {
+          var lostGold = Math.min(state.gold, Math.floor(state.gold * 0.2) + 20);
+          state.gold -= lostGold;
+          state.food -= 20;
+          state.happiness = clamp(state.happiness - 8, 0, 100);
+          msg = "⚔️ 匪患来袭（强度 " + strength + "），防守不足（" + defense + "）！损失 " + lostGold + " 金币、20 粮食，民心 -8。";
+        }
+        break;
+    }
+    logMsg(msg);
+  }
+
+  function winGame() {
+    state.gameOver = true;
+    $("end-title").textContent = "🎉 胜利！";
+    $("end-msg").textContent = "宫殿落成，你的城池繁荣昌盛，成为一方名城！";
+    $("end-turns").textContent = state.turn;
+    $("overlay-end").classList.remove("hidden");
+  }
+
+  function loseGame(reason) {
+    state.gameOver = true;
+    $("end-title").textContent = "💔 城池陷落";
+    $("end-msg").textContent = reason;
+    $("end-turns").textContent = state.turn;
+    $("overlay-end").classList.remove("hidden");
+  }
+
+  function buildPanel() {
+    var box = $("build-panel");
+    box.innerHTML = "";
+    Object.keys(BUILDINGS).forEach(function (key) {
+      var c = BUILDINGS[key];
+      var btn = document.createElement("button");
+      btn.className = "build-btn";
+      btn.dataset.key = key;
+      var costStr = [];
+      if (c.cost.gold) costStr.push("💰" + c.cost.gold);
+      if (c.cost.wood) costStr.push("🪵" + c.cost.wood);
+      if (c.cost.stone) costStr.push("⛏️" + c.cost.stone);
+      btn.innerHTML =
+        '<div><span class="icon">' + c.icon + '</span><span class="nm">' + c.name + '</span></div>' +
+        '<div class="cost">' + costStr.join(" ") + '</div>' +
+        '<div class="desc">' + c.desc + '</div>';
+      btn.onclick = function () {
+        if (state.gameOver) return;
+        if (state.demolish) { state.demolish = false; $("demolish").classList.remove("on"); }
+        state.selected = (state.selected === key) ? null : key;
+        render();
+      };
+      box.appendChild(btn);
+    });
+  }
+
+  function render() {
+    $("s-gold").textContent = state.gold;
+    $("s-food").textContent = state.food;
+    $("s-wood").textContent = state.wood;
+    $("s-stone").textContent = state.stone;
+    $("s-pop").textContent = state.population;
+    $("s-happy").textContent = state.happiness;
+    $("s-turn").textContent = state.turn;
+
+    var grid = $("grid");
+    grid.innerHTML = "";
+    for (var i = 0; i < state.grid.length; i++) {
+      var b = state.grid[i];
+      var cell = document.createElement("div");
+      cell.className = "cell" + (b ? " built" : (state.selected ? " empty-selected" : ""));
+      if (b) { cell.textContent = BUILDINGS[b].icon; cell.title = BUILDINGS[b].name; }
+      (function (idx) { cell.onclick = function () { onCell(idx); }; })(i);
+      grid.appendChild(cell);
+    }
+
+    // 建造按钮状态
+    var btns = document.querySelectorAll(".build-btn");
+    btns.forEach(function (btn) {
+      var key = btn.dataset.key;
+      var c = BUILDINGS[key];
+      btn.classList.toggle("selected", state.selected === key);
+      var reqMet = !(c.popReq && state.population < c.popReq);
+      btn.disabled = state.gameOver || !canAfford(key) || !reqMet;
+    });
+
+    $("mode-hint").textContent = state.demolish
+      ? "拆除模式：点击地图上的建筑将其拆除"
+      : (state.selected
+          ? "已选择「" + BUILDINGS[state.selected].name + "」，点击地图空地建造"
+          : "点击下方建筑，再点地图格子建造");
+
+    // 记事
+    var log = $("log");
+    log.innerHTML = "";
+    state.log.forEach(function (entry) {
+      var div = document.createElement("div");
+      div.className = "entry" + (entry.turn ? " turn" : "");
+      div.textContent = entry.msg;
+      log.appendChild(div);
+    });
+  }
+
+  function bind() {
+    $("start-btn").onclick = function () { $("overlay").classList.add("hidden"); };
+    $("next-turn").onclick = nextTurn;
+    $("demolish").onclick = function () {
+      if (state.gameOver) return;
+      state.demolish = !state.demolish;
+      if (state.demolish) state.selected = null;
+      $("demolish").classList.toggle("on", state.demolish);
+      render();
+    };
+    $("restart-btn").onclick = function () {
+      $("overlay-end").classList.add("hidden");
+      setup();
+    };
+  }
+
+  setup();
+})();
+</script>
+</body>
+</html>
